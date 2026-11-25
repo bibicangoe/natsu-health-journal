@@ -1,6 +1,6 @@
 'use strict';
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 const tables = ['meal', 'exercise', 'body', 'pressure', 'condition', 'recipe', 'favorite'];
 const clock = part => new Intl.DateTimeFormat('sv-SE', { timeZone:'Asia/Tokyo', ...(part === 'time' ? {hour:'2-digit', minute:'2-digit', hourCycle:'h23'} : {year:'numeric',month:'2-digit',day:'2-digit'}) }).format(new Date());
 const today = () => clock('date');
@@ -137,10 +137,13 @@ function progress(home=false) {
 }
 function exercises() {
   const [name,dose,how,kind]=workout();
-  const done=at('exercise').find(row=>row.source==='daily');
+  const completed=at('exercise').filter(row=>row.source==='daily');
+  const same=completed.some(row=>row.name===name && row.memo===dose);
+  const recordLabel=same?(modeToday()===modes[2]?'休養をもう一度記録':'もう一度記録する')
+    :modeToday()===modes[2]?'休養を記録':'完了を記録';
   return box('今日の運動','<label>今日の運動強度<select id="mode">'+modes.map(x=>'<option'+(x===modeToday()?' selected':'')+'>'+x+'</option>').join('')+'</select></label>'
-  + (done?'<p>'+tag('記録済み')+' '+escape(done.name)+'</p>':'')+'<h3>'+escape(name)+'</h3><p>'+escape(dose)+'</p>'+diagram(kind)+'<p>'+escape(how)+'</p>'
-  +'<div class="actions">'+button('別の運動にする','another')+button(modeToday()===modes[2]?'休養を記録':'完了を記録','done','',true)+button('ダンス担当を記録','edit','dance')+'</div>');
+  + (completed.length?'<p>'+tag('運動・休養の記録 '+completed.length+'件')+'</p>':'')+'<h3>'+escape(name)+'</h3><p>'+escape(dose)+'</p>'+diagram(kind)+'<p>'+escape(how)+'</p>'
+  +'<div class="actions">'+button('別の運動にする','another')+button(recordLabel,'done','',true)+button('ダンス担当を記録','edit','dance')+'</div>');
 }
 const currentPlan = () => state.plan?.days.find(item=>item.date===today());
 const mealPlan = item => '<ul>'+[['朝食','breakfast'],['昼食','lunch'],['夕食','dinner'],['間食','snack']].filter(([,key])=>item[key]).map(([title,key])=>'<li><b>'+title+'</b> '+escape(item[key])+'</li>').join('')+'</ul>';
@@ -458,11 +461,8 @@ async function action(name,value) {
   if(name==='another') next.offset[today()]=(next.offset[today()]||0)+1;
   if(name==='mode'){next.mode[today()]=value;next.offset[today()]=0}
   if(name==='done'){
-    const row=at('exercise').find(item=>item.source==='daily');
     const [title,dose]=workout();
-    if(row?.name===title){message('今日はこの内容を記録済みです');return}
-    if(row&&!confirm('今日の運動・休養の記録を置き換えますか？')) return;
-    next.records.exercise=next.records.exercise.filter(item=>item.id!==row?.id).concat({id:uid(),date:today(),name:title,memo:dose,source:'daily'});
+    next.records.exercise.push({id:uid(),date:today(),name:title,memo:dose,source:'daily'});
   }
   if(name==='favorite'){
     const row=state.records.meal.find(item=>item.id===value);
@@ -487,7 +487,7 @@ async function action(name,value) {
     if(state.plan&&!confirm('現在の献立を新しい7日分に置き換えますか？')) return;
   }
   await save(next);render();
-  if(name==='done') message('今日の活動を記録しました');
+  if(name==='done') message('今日の活動を追加しました');
   if(name==='favorite') message('お気に入りに追加しました');
   if(name==='import-plan') message('7日間の献立・運動計画を取り込みました');
 }
